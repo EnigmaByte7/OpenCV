@@ -1,0 +1,1 @@
+pip install cv2 tensorflow keras keras-facenet python numpy scikit-learn os urllib
