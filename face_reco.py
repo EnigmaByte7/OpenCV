@@ -10,6 +10,10 @@ from sklearn.svm import SVC
 from keras_facenet import FaceNet
 
 
+caffe_model_url = 'https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt'
+caffe_model_file = 'deploy.prototxt'
+caffe_weights_url = 'https://github.com/opencv/opencv_3rdparty/raw/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel'
+caffe_weights_file = 'res10_300x300_ssd_iter_140000.caffemodel'
 
 def download_file(url, filename):
     if not os.path.exists(filename):
