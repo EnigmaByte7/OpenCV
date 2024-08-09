@@ -1,121 +1,109 @@
-import cv2
-import numpy as np
 import os
-import urllib.request
-import keras
-import tensorflow as tf
-from keras.models import load_model
-from sklearn.preprocessing import LabelEncoder, Normalizer
-from sklearn.svm import SVC
+from os import listdir
+from numpy import asarray, expand_dims
+import pickle
+import cv2
 from keras_facenet import FaceNet
-from mtcnn import MTCNN  # MTCNN import kiya
+from mtcnn import MTCNN
+from sklearn.metrics.pairwise import cosine_similarity
 
-# Caffe model files ko download karne ke liye URLs
-caffe_model_url = 'https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt'
-caffe_model_file = 'deploy.prototxt'
-caffe_weights_url = 'https://github.com/opencv/opencv_3rdparty/raw/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel'
-caffe_weights_file = 'res10_300x300_ssd_iter_140000.caffemodel'
+#mtcnn ka use kiya h detectino k liye caffee was waste
+detector = MTCNN()
+MyFaceNet = FaceNet()
 
-def download_file(url, filename):
-    if not os.path.exists(filename):
-        print(f'Downloading {filename}...')
-        urllib.request.urlretrieve(url, filename)
-        print(f'{filename} downloaded.')
+#dataset ka pth
+folder = 'dataset/'
+database_file = "data.pkl"
+database = {}
 
-download_file(caffe_model_url, caffe_model_file)
-download_file(caffe_weights_url, caffe_weights_file)
+def save_database():
+    with open(database_file, "wb") as myfile:
+        pickle.dump(database, myfile)
 
-facenet_model = FaceNet()
+def load_database():
+    global database
+    #agar data.pkl present h to thik othw train new data
+    if os.path.exists(database_file):
+        with open(database_file, "rb") as myfile:
+            database = pickle.load(myfile)
+        print("Database loaded from file.")
+    else:
+        for filename in listdir(folder):
+            for file in listdir(f'C://Users//Dell//OpenCV//dataset//{filename}'):
+                vid = cv2.imread(f'C://Users//Dell//OpenCV//dataset//{filename}//{file}')
 
-# MTCNN ka instance create kiya
-mtcnn = MTCNN()
+                #yahan pe dtection strt hogi
+                faces = detector.detect_faces(vid)
 
-def get_embedding(model, face_pixels):
-    face_pixels = face_pixels.astype('float32')
-    mean, std = face_pixels.mean(), face_pixels.std()
-    face_pixels = (face_pixels - mean) / std
-    samples = np.expand_dims(face_pixels, axis=0)
-    yhat = model.embeddings(samples)
-    return yhat[0]
+                for face_data in faces:
+                    x1, y1, width, height = face_data['box']
+                    x1, y1 = abs(x1), abs(y1)
+                    x2, y2 = x1 + width, y1 + height
 
-def detect_faces(image):
-    # MTCNN se face detect karne ka kaam
-    faces = mtcnn.detect_faces(image)
-    if faces:
-        x, y, width, height = faces[0]['box']
-        x, y = abs(x), abs(y)
-        face = image[y:y+height, x:x+width]
+                    # cropping faces kyoki facenet needs 160 by 160
+                    face = vid[y1:y2, x1:x2]
+                    face = cv2.resize(face, (160, 160))
+
+                    # face ko convert krna pdega array me, normalization ke liye
+                    face = asarray(face)
+                    face = expand_dims(face, axis=0)
+
+                    #embedding generate hogi
+                    signature = MyFaceNet.embeddings(face)
+
+                    #embeddings data.pkl me save hojaygi
+                    database[os.path.splitext(filename)[0]] = signature
+
+        save_database()
+
+load_database()
+
+#ye screen capture k liye
+cap = cv2.VideoCapture(0)
+
+while True:
+    _, vid = cap.read()
+    
+    #call detector
+    faces = detector.detect_faces(vid)
+
+    for face_data in faces:
+        x1, y1, width, height = face_data['box']
+        x1, y1 = abs(x1), abs(y1)
+        x2, y2 = x1 + width, y1 + height
+
+        #aagain crop and resize fce 
+        face = vid[y1:y2, x1:x2]
         face = cv2.resize(face, (160, 160))
-        return face
-    return None
 
-def load_faces(directory):
-    faces = []
-    labels = []
-    # load faces funcition dataset me jake subdir me jake data likalega aur use facenet  me bhejega
-    for subdir in os.listdir(directory):
-        path = os.path.join(directory, subdir)
-        if not os.path.isdir(path):
-            continue
-        for filename in os.listdir(path):
-            print(filename)
-            file_path = 'C:\\Users\\Dell\\OpenCV\\' +  path + '\\' + filename
-            image = cv2.imread(file_path)
-            face = detect_faces(image)
-            if face is not None:
-                # facenet embedings return krega (embedgings maine facial features..)
-                embedding = get_embedding(facenet_model, face)
-                faces.append(embedding)
-                labels.append(subdir)
-    print(labels)
-    return np.array(faces), np.array(labels)
+        # normalization
+        face = asarray(face)
+        face = expand_dims(face, axis=0)
 
-def main():
-    # yahan se dataset ko accedss krega..
-    dataset_path = 'dataset/'  
-    faces, labels = load_faces(dataset_path)
+        # facenet embedding genearte kro 
+        signature = MyFaceNet.embeddings(face)
 
-    label_encoder = LabelEncoder()
-    labels = label_encoder.fit_transform(labels)
+        max_similarity = -1  
+        identity = 'Unknown'
+        for key, value in database.items():
+            #is version me humlog cosine similarity bhi check krenge, that will improve accuracy a lot
+            similarity = cosine_similarity(value, signature)[0][0]
+            if similarity > max_similarity:
+                max_similarity = similarity
+                identity = key
 
-    normalizer = Normalizer(norm='l2')
-    faces = normalizer.transform(faces)
+        if max_similarity > 0.6:  #threshold valu
+            cv2.putText(vid, identity, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+        else:
+            cv2.putText(vid, 'Unknown', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
-    # facenet se mila embeddings svm classifier me jayega.. svm classifier embedings ko process krega to identify all images to individual person...
-    classifier = SVC(kernel='linear', probability=True)
-    classifier.fit(faces, labels)
+        cv2.rectangle(vid, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-    cap = cv2.VideoCapture(0)
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    cv2.imshow('res', vid)
 
-        # yahan se realtime face capture start hoga
-        face = detect_faces(frame)
-        if face is not None:
-            # aur call krega to get processed embedings
-            face_embedding = get_embedding(facenet_model, face)
-            face_embedding = normalizer.transform([face_embedding])
-            # data ke basis pe recognise krega aur probability generate krega..
-            predictions = classifier.predict_proba(face_embedding)
-            class_index = np.argmax(predictions)
-            class_probability = predictions[0, class_index]
-            predicted_label = label_encoder.inverse_transform([class_index])
+    k = cv2.waitKey(5) & 0xFF
+    if k == 27:
+        break
 
-            if class_probability > 0.5:  
-                text = f'{predicted_label[0]} ({class_probability*100:.2f}%)'
-            else:
-                text = 'Unknown'
-
-            cv2.putText(frame, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-        cv2.imshow('Video', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-if __name__ == "__main__":
-    main()
+cv2.destroyAllWindows()
+cap.release()
