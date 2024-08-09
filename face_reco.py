@@ -62,7 +62,7 @@ load_database()
 cap = cv2.VideoCapture(0)
 
 while True:
-    _, vid = cap.read()
+    vid = cv2.imread('img.jpeg')
     
     #call detector
     faces = detector.detect_faces(vid)
@@ -94,10 +94,11 @@ while True:
 
         if max_similarity > 0.6:  #threshold valu
             cv2.putText(vid, identity, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+            cv2.rectangle(vid, (x1, y1), (x2, y2), (255, 0, 0), 2)
         else:
-            cv2.putText(vid, 'Unknown', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+            cv2.putText(vid, '.', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+            cv2.rectangle(vid, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-        cv2.rectangle(vid, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
     cv2.imshow('res', vid)
 
