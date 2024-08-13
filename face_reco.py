@@ -9,15 +9,25 @@ from sklearn.metrics.pairwise import cosine_similarity
 from tkinter import *
 import csv
 from PIL import ImageTk, Image
+import shutil
 
 #mtcnn ka use kiya h detectino k liye caffee was waste
 detector = MTCNN()
 MyFaceNet = FaceNet()
 
-#dataset ka pth
-folder = 'dataset1/'
+#dataset ka pth is variable now, agar koi new data hai to others ke liye train kro 
+folder = 'others/'
+
 database_file = "data.pkl"
 database = {}
+
+#ye function data.pkl ka data dekhne ke liye hai
+def viewpkl():
+    if os.path.exists('data.pkl'):
+        with open(database_file, "rb") as myfile:
+            database = pickle.load(myfile)
+            for name, emb in database.items():
+                print("Name : ", name, "Embeddings : ", emb, end='\n')
 
 def save_database():
     with open(database_file, "wb") as myfile:
@@ -29,38 +39,57 @@ def load_database():
     if os.path.exists(database_file):
         with open(database_file, "rb") as myfile:
             database = pickle.load(myfile)
-        print("Database loaded from file.")
+            if(database == {}):
+                # agar somehow the data.pkl is empty
+                trainer('dataset1/')
     else:
-        for filename in listdir(folder):
-            for file in listdir(f'C://Users//Dell//OpenCV//dataset1//{filename}'):
-                vid = cv2.imread(f'C://Users//Dell//OpenCV//dataset1//{filename}//{file}')
+        trainer('dataset1/')
+    print("Database loaded from file.")
 
-                #yahan pe dtection strt hogi
-                faces = detector.detect_faces(vid)
+def trainer(folder):
+    for filename in listdir(f'C://Users//Dell//OpenCV//{folder}'):
+        for file in listdir(f'C://Users//Dell//OpenCV//{folder}//{filename}'):
+            vid = cv2.imread(f'C://Users//Dell//OpenCV//{folder}//{filename}//{file}')
 
-                for face_data in faces:
-                    x1, y1, width, height = face_data['box']
-                    x1, y1 = abs(x1), abs(y1)
-                    x2, y2 = x1 + width, y1 + height
+            #yahan pe dtection strt hogi
+            faces = detector.detect_faces(vid)
 
-                    # cropping faces kyoki facenet needs 160 by 160
-                    face = vid[y1:y2, x1:x2]
-                    face = cv2.resize(face, (160, 160))
+            for face_data in faces:
+                x1, y1, width, height = face_data['box']
+                x1, y1 = abs(x1), abs(y1)
+                x2, y2 = x1 + width, y1 + height
 
-                    # face ko convert krna pdega array me, normalization ke liye
-                    face = asarray(face)
-                    face = expand_dims(face, axis=0)
+                # cropping faces kyoki facenet needs 160 by 160
+                face = vid[y1:y2, x1:x2]
+                face = cv2.resize(face, (160, 160))
 
-                    #embedding generate hogi
-                    signature = MyFaceNet.embeddings(face)
+                # face ko convert krna pdega array me, normalization ke liye
+                face = asarray(face)
+                face = expand_dims(face, axis=0)
 
-                    #embeddings data.pkl me save hojaygi
-                    database[os.path.splitext(filename)[0]] = signature
+                #embedding generate hogi
+                signature = MyFaceNet.embeddings(face)
 
-        save_database()
+                #embeddings data.pkl me save hojaygi
+                #database[os.path.splitext(filename)[0]] = signature
+
+    if(folder == 'others/'):
+        print("Model Triained on the new dataset")
+        destination = 'C://Users//Dell//OpenCV//dataset1//'
+        main = 'C://Users//Dell//OpenCV//others//'
+        for folders in os.listdir(main):
+            shutil.move(f'C://Users//Dell//OpenCV//others//{folders}', f'C://Users//Dell//OpenCV//dataset1')
+            print("Moved :", folders)
+    else:
+        print("Model trained on the big dataset")
+
+    save_database()
 
 load_database()
+if os.listdir('C://Users//Dell//OpenCV//others') != {}:
+    trainer('others/')
 
+#viewpkl()
 
 cap = cv2.VideoCapture(0)
 #ye hai vo set jisme identified logo ke name save honge
@@ -145,9 +174,21 @@ video_capture()
 
 root.mainloop()
 
+def close():
+    root.destroy()
 
-if len(s) > 0:
-    for i in s:
-        print(i)
+root = Tk()
+root.geometry('400x500')
+root.title("Recognised Students")
+if s != {}:
+    for i in s: 
+        label = Label(root, text=i, anchor=CENTER, font=('Arial',15,'bold'), padx=15, pady=15)
+        #pack se window pe place ho jata h
+        label.pack(pady=2)
+    
+    btn = Button(root, text="Close", command=close)
+    btn.pack(pady=10)
 else:
     print("Empty")
+
+root.mainloop()
