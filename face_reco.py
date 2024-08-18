@@ -100,10 +100,11 @@ def video_capture():
     back = cv2.imread('C://Users//Dell//Downloads//Group 1.png')
     #ye screen capture k liye
 
-    cv2.namedWindow('Video Feed', cv2.WND_PROP_FULLSCREEN)
-    cv2.setWindowProperty('Video Feed', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.namedWindow('Video Feed')
+    #cv2.setWindowProperty('Video Feed', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     while True:
         _, vid = cap.read()
+        vid = cv2.imread('C://Users//Dell//OpenCV//grp.jpg')
         vid = cv2.resize(vid, (800,500))
         #call detector
         faces = detector.detect_faces(vid)
@@ -147,7 +148,7 @@ def video_capture():
                 cv2.rectangle(vid, (x1, y1), (x2, y2), (255, 0, 0), 2)
                 s.add(identity)
             else:
-                cv2.putText(vid, 'Unknown', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+                cv2.putText(vid, '.', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
                 cv2.rectangle(vid, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
         back[174:174 + 500, 121:121 + 800] = vid
