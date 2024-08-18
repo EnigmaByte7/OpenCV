@@ -10,6 +10,7 @@ from tkinter import *
 import csv
 from PIL import ImageTk, Image
 import shutil
+from sklearn.metrics.pairwise import euclidean_distances
 
 #mtcnn ka use kiya h detectino k liye caffee was waste
 detector = MTCNN()
@@ -71,7 +72,7 @@ def trainer(folder):
                 signature = MyFaceNet.embeddings(face)
 
                 #embeddings data.pkl me save hojaygi
-                #database[os.path.splitext(filename)[0]] = signature
+                database[os.path.splitext(filename)[0]] = signature
 
     if(folder == 'others/'):
         print("Model Triained on the new dataset")
@@ -96,39 +97,52 @@ cap = cv2.VideoCapture(0)
 s = set()
 
 def video_capture():
+    back = cv2.imread('C://Users//Dell//Downloads//Group 1.png')
     #ye screen capture k liye
-    _, vid = cap.read()
-    vid = cv2.resize(vid, (800,600))
-    vid = cv2.cvtColor(vid, cv2.COLOR_BGR2RGB)
-    #call detector
-    faces = detector.detect_faces(vid)
 
-    for face_data in faces:
-        x1, y1, width, height = face_data['box']
-        x1, y1 = abs(x1), abs(y1)
-        x2, y2 = x1 + width, y1 + height
+    cv2.namedWindow('Video Feed', cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty('Video Feed', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    while True:
+        _, vid = cap.read()
+        vid = cv2.resize(vid, (800,500))
+        #call detector
+        faces = detector.detect_faces(vid)
 
-        #aagain crop and resize fce 
-        face = vid[y1:y2, x1:x2]
-        face = cv2.resize(face, (600, 600))
+        for face_data in faces:
+            x1, y1, width, height = face_data['box']
+            x1, y1 = abs(x1), abs(y1)
+            x2, y2 = x1 + width, y1 + height
 
-        # normalization
-        face = asarray(face)
-        face = expand_dims(face, axis=0)
+            #aagain crop and resize fce 
+            face = vid[y1:y2, x1:x2]
+            face = cv2.resize(face, (600, 600))
 
-        # facenet embedding genearte kro 
-        signature = MyFaceNet.embeddings(face)
+            # normalization
+            face = asarray(face)
+            face = expand_dims(face, axis=0)
 
-        max_similarity = -1  
-        identity = 'Unknown'
-        for key, value in database.items():
-            #is version me humlog cosine similarity bhi check krenge, that will improve accuracy a lot
-            similarity = cosine_similarity(value, signature)[0][0]
-            if similarity > max_similarity:
-                max_similarity = similarity
-                identity = key
+            # facenet embedding genearte kro 
+            signature = MyFaceNet.embeddings(face)
 
-            if max_similarity > 0.6:  #threshold valu
+            max_similarity = -1  
+            min_euclidean_distance = float('inf')
+            identity = 'Unknown'
+
+            for key, value in database.items():
+                # Cosine similarity check
+                similarity = cosine_similarity(value, signature)[0][0]
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    identity = key
+
+                # Euclidean distance check
+                euclidean_distance = euclidean_distances(value, signature)[0][0]
+                if euclidean_distance < min_euclidean_distance:
+                    min_euclidean_distance = euclidean_distance
+                    identity = key
+
+            # ab combined value se threshold check kro
+            if max_similarity > 0.6 and min_euclidean_distance < 10.0:  # eucludean threshold
                 cv2.putText(vid, identity, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
                 cv2.rectangle(vid, (x1, y1), (x2, y2), (255, 0, 0), 2)
                 s.add(identity)
@@ -136,59 +150,48 @@ def video_capture():
                 cv2.putText(vid, 'Unknown', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
                 cv2.rectangle(vid, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-    #frame ko tkinter label pe display krne keliye convert krna pdega into image and then PIL image
-    img = Image.fromarray(vid)        
-    imgtk = ImageTk.PhotoImage(image=img)
-    label.imgtk = imgtk
-    label.configure(image=imgtk)
-    
-    label.after(1, video_capture)
-        
-#to write into csv
-def save():
-    with open('attendance.csv', mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Name"])
-        for name in s:
-            writer.writerow([name])
+        back[174:174 + 500, 121:121 + 800] = vid
+        cv2.imshow('Video Feed', back)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-# exit keliye
-def quit():
-    save()
-    root.destroy()
+    cap.release()
+    cv2.destroyAllWindows()
+    show_attendance()
 
-#initialixe tkinter window
+
 root = Tk()
-root.attributes("-fullscreen", True)
-root.title("Video Feed")
-
-label = Label(root)
-#pack se window pe place ho jata h
-label.pack()
-
-btn = Button(root, text="Quit", command=quit)
-btn.pack(pady=10)
-
-video_capture()
-
-
-root.mainloop()
+selected_names = {}
 
 def close():
     root.destroy()
 
-root = Tk()
-root.geometry('400x500')
-root.title("Recognised Students")
-if s != {}:
-    for i in s: 
-        label = Label(root, text=i, anchor=CENTER, font=('Arial',15,'bold'), padx=15, pady=15)
-        #pack se window pe place ho jata h
-        label.pack(pady=2)
-    
-    btn = Button(root, text="Close", command=close)
-    btn.pack(pady=10)
-else:
-    print("Empty")
+def save():
+    with open('attendance.csv', mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Name"])
+        for name, var in selected_names.items():
+            if var.get() == 1:  
+                writer.writerow([name])
+    print("Attendance saved.")
 
-root.mainloop()
+def show_attendance():
+    root.geometry('400x500')
+    root.title("Recognised Students")
+
+    for i in s:
+        #intVAr se checkbutton ki true or false value store aur update hoti hai
+        var = IntVar()
+        selected_names[i] = var
+        checkbox = Checkbutton(root, text=i, variable=var, font=('Arial', 15, 'bold'), padx=15, pady=15)
+        checkbox.pack(pady=2)
+
+    save_button = Button(root, text="Save", command=save)
+    save_button.pack(pady=10)
+
+    close_button = Button(root, text="Close", command=close)
+    close_button.pack(pady=10)
+
+    root.mainloop()
+
+video_capture()
